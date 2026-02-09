@@ -22,11 +22,13 @@ import { JwtGuard } from '@shared/guards/jwt.guard';
 import { Institution } from '@shared/schemas/institution.schema';
 import { CreateInstitutionDto } from '@shared/dtos/institutions/createInstitution.dto';
 import { UpdateInstitutionDto } from '@shared/dtos/institutions/updateInstitution.dto';
+import { SuperAdminGuard } from '@shared/guards/super-admin.guard';
 
 import { InstitutionsService } from './institutions.service';
 
 @ApiTags('institutions')
 @Controller('institutions')
+@UseGuards(JwtGuard, SuperAdminGuard)
 export class InstitutionsController {
   constructor(private readonly institutionsService: InstitutionsService) {}
 
