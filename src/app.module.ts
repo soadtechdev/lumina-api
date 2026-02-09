@@ -4,6 +4,7 @@ import { ConfigModule } from '@nestjs/config';
 import { LoggerMiddleware } from '@shared/middlewares/logger.middleware';
 import { CacheModule } from '@nestjs/cache-manager';
 import constants from 'src/contants';
+import { TenantMiddleware } from '@shared/middlewares/tenant.middleware';
 
 import { UsersModule } from './modules/users/users.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -31,5 +32,17 @@ import { InstitutionsModule } from './modules/institutions/institutions.module';
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggerMiddleware).forRoutes('*');
+    consumer
+      .apply(TenantMiddleware)
+      .exclude(
+        'auth/login',
+        'auth/register-user',
+        'auth/validate-otp',
+        'auth/regenerate-otp',
+        'auth/recovery-password-request',
+        'auth/change-password',
+        'institutions(.*)',
+      )
+      .forRoutes('*');
   }
 }
