@@ -110,6 +110,7 @@ export class AuthService {
           id: user._id.toString(),
           tenantId: user.tenantId.toString(),
           role: user.role,
+          accountStatus: AccountStatus.ACTIVE,
         },
         null,
         '30m',
@@ -203,6 +204,7 @@ export class AuthService {
         id: user._id.toString(),
         tenantId: user.tenantId.toString(),
         role: user.role,
+        accountStatus: AccountStatus.ACTIVE,
       });
 
       return {
@@ -261,6 +263,7 @@ export class AuthService {
         id: user._id.toString(),
         tenantId: user.tenantId.toString(),
         role: user.role,
+        accountStatus: AccountStatus.ACTIVE,
       });
 
       return {
@@ -337,6 +340,7 @@ export class AuthService {
         id: user._id.toString(),
         tenantId: user.tenantId.toString(),
         role: user.role,
+        accountStatus: AccountStatus.ACTIVE,
       });
 
       return {
