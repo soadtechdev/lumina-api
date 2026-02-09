@@ -108,7 +108,7 @@ export class AuthService {
       const jwtToken = generateJWTToken(
         {
           id: user._id.toString(),
-          tenantId: user.tenantId.toString(),
+          tenantId: user.tenantId ? user.tenantId.toString() : null,
           role: user.role,
           accountStatus: AccountStatus.ACTIVE,
         },
@@ -137,7 +137,7 @@ export class AuthService {
       const otpCode = generateOTP();
       const updateUser = await this.usersService.update(
         user._id.toString(),
-        user.tenantId.toString(),
+        user.tenantId ? user.tenantId.toString() : null,
         {
           otpCode,
           otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
@@ -202,7 +202,7 @@ export class AuthService {
       // JWT definitivo (1 año)
       const jwtToken = generateJWTToken({
         id: user._id.toString(),
-        tenantId: user.tenantId.toString(),
+        tenantId: user.tenantId ? user.tenantId.toString() : null,
         role: user.role,
         accountStatus: AccountStatus.ACTIVE,
       });
@@ -261,7 +261,7 @@ export class AuthService {
 
       const token = generateJWTToken({
         id: user._id.toString(),
-        tenantId: user.tenantId.toString(),
+        tenantId: user.tenantId ? user.tenantId.toString() : null,
         role: user.role,
         accountStatus: AccountStatus.ACTIVE,
       });
@@ -289,10 +289,14 @@ export class AuthService {
 
       const otpCode = generateOTP();
 
-      await this.usersService.update(user._id.toString(), user.tenantId.toString(), {
-        otpCode,
-        otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
-      });
+      await this.usersService.update(
+        user._id.toString(),
+        user.tenantId ? user.tenantId.toString() : null,
+        {
+          otpCode,
+          otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
+        },
+      );
 
       this.resendProvider.sendTemplateEmail({
         type: emailType.CODE_VERIFICATION,
@@ -323,14 +327,18 @@ export class AuthService {
         throw new HttpException('OTP EXPIRED, REQUEST ANOTHER ONE', HttpStatus.BAD_REQUEST);
       }
 
-      await this.usersService.update(user._id.toString(), user.tenantId.toString(), {
-        otpCode: null,
-        otpExpire: null,
-      });
+      await this.usersService.update(
+        user._id.toString(),
+        user.tenantId ? user.tenantId.toString() : null,
+        {
+          otpCode: null,
+          otpExpire: null,
+        },
+      );
 
       const userWithPassword = await this.usersService.update(
         user._id.toString(),
-        user.tenantId.toString(),
+        user.tenantId ? user.tenantId.toString() : null,
         {
           password: changePasswordDto?.password,
         },
@@ -338,7 +346,7 @@ export class AuthService {
 
       const jwtToken = generateJWTToken({
         id: user._id.toString(),
-        tenantId: user.tenantId.toString(),
+        tenantId: user.tenantId ? user.tenantId.toString() : null,
         role: user.role,
         accountStatus: AccountStatus.ACTIVE,
       });

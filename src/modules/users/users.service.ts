@@ -49,7 +49,7 @@ export class UsersService {
     try {
       const query: any = { email, deletedAt: null };
 
-      if (tenantId) {
+      if (tenantId !== null && tenantId !== undefined) {
         query.tenantId = tenantId;
       }
 
@@ -100,7 +100,11 @@ export class UsersService {
     }
   }
 
-  async update(userId: string, tenantId: string, updateUserDto: UpdateUserDto): Promise<User> {
+  async update(
+    userId: string,
+    tenantId: string | null,
+    updateUserDto: UpdateUserDto,
+  ): Promise<User> {
     try {
       let password: string;
 
