@@ -32,17 +32,5 @@ import { InstitutionsModule } from './modules/institutions/institutions.module';
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(LoggerMiddleware).forRoutes('*');
-    consumer
-      .apply(TenantMiddleware)
-      .exclude(
-        'auth/login',
-        'auth/register-user',
-        'auth/validate-otp',
-        'auth/regenerate-otp',
-        'auth/recovery-password-request',
-        'auth/change-password',
-        'institutions(.*)',
-      )
-      .forRoutes('*');
   }
 }

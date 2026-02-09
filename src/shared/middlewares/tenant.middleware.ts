@@ -7,6 +7,7 @@ export class TenantMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction) {
     const user = req['user'];
 
+    console.log(user);
     // Si es Super Admin, no necesita tenantId
     if (user?.role === RoleUser.SUPER_ADMIN) {
       req['tenantId'] = null; // Super Admin es global

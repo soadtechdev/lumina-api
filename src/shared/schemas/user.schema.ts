@@ -40,6 +40,14 @@ export enum RoleUser {
   collection: 'users',
 })
 export class User extends BaseTenantEntity {
+  @Prop({
+    type: Types.ObjectId,
+    ref: 'Institution',
+    required: false,
+    index: true,
+  })
+  tenantId: Types.ObjectId;
+
   @Prop({ type: String, required: true })
   firstName: string;
 

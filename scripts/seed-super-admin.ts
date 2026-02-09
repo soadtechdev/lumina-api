@@ -22,12 +22,13 @@ async function seedSuperAdmin() {
 
     // Verificar si ya existe super admin
     const existingSuperAdmin = await UserModel.findOne({
-      role: 'super_admin',
+      email: 'admin@lumina.tech',
     });
 
     if (existingSuperAdmin) {
       console.log('⚠️  Super Admin already exists');
       console.log('Email:', existingSuperAdmin.email);
+      console.log('Role:', existingSuperAdmin.role);
       process.exit(0);
     }
 
@@ -42,12 +43,13 @@ async function seedSuperAdmin() {
       role: 'super_admin',
       accountStatus: 'active',
       isActive: true,
-      tenantId: null,
+      // tenantId se omite (será null/undefined)
     });
 
     await superAdmin.save();
 
     console.log('✅ Super Admin created successfully!');
+    console.log('👤 User ID:', superAdmin._id);
     console.log('📧 Email: admin@lumina.tech');
     console.log('🔑 Password: SuperAdmin123!');
     console.log('⚠️  CHANGE THIS PASSWORD IN PRODUCTION!');

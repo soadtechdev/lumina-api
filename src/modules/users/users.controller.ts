@@ -13,12 +13,13 @@ import { JwtGuard } from '@shared/guards/jwt.guard';
 import { User } from '@shared/schemas/user.schema';
 import { TenantId } from '@shared/decorators/tenant.decorator';
 import { AccountActiveGuard } from '@shared/guards/account-active.guard';
+import { TenantGuard } from '@shared/guards/tenant.guard';
 
 import { UsersService } from './users.service';
 
 @ApiTags('users')
 @Controller('users')
-@UseGuards(JwtGuard, AccountActiveGuard)
+@UseGuards(JwtGuard, TenantGuard, AccountActiveGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
