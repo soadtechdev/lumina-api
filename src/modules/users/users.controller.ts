@@ -12,16 +12,17 @@ import { UpdateUserDto } from '@shared/dtos/users/updateUser.dto';
 import { JwtGuard } from '@shared/guards/jwt.guard';
 import { User } from '@shared/schemas/user.schema';
 import { TenantId } from '@shared/decorators/tenant.decorator';
+import { AccountActiveGuard } from '@shared/guards/account-active.guard';
 
 import { UsersService } from './users.service';
 
 @ApiTags('users')
 @Controller('users')
+@UseGuards(JwtGuard, AccountActiveGuard)
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Version('1')
-  @UseGuards(JwtGuard)
   @ApiBearerAuth()
   @ApiCreatedResponse({ description: 'The user found successfully', type: User })
   @ApiUnauthorizedResponse({ description: 'Token invalid' })
@@ -33,7 +34,6 @@ export class UsersController {
   }
 
   @Version('1')
-  @UseGuards(JwtGuard)
   @ApiBearerAuth()
   @ApiUnauthorizedResponse({ description: 'Token invalid' })
   @ApiNotFoundResponse({ description: 'User not found' })
@@ -44,7 +44,6 @@ export class UsersController {
   }
 
   @Version('1')
-  @UseGuards(JwtGuard)
   @ApiBearerAuth()
   @ApiUnauthorizedResponse({ description: 'Token invalid' })
   @ApiNotFoundResponse({ description: 'User not found' })
@@ -55,7 +54,6 @@ export class UsersController {
   }
 
   @Version('1')
-  @UseGuards(JwtGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ description: 'The user updated successfully', type: User })
   @ApiUnauthorizedResponse({ description: 'Token invalid' })
@@ -70,7 +68,6 @@ export class UsersController {
   }
 
   @Version('1')
-  @UseGuards(JwtGuard)
   @ApiBearerAuth()
   @ApiOkResponse({ description: 'User deleted successfully', type: User })
   @ApiUnauthorizedResponse({ description: 'Token invalid' })
