@@ -4,8 +4,8 @@ import { HydratedDocument } from 'mongoose';
 export type InstitutionDocument = HydratedDocument<Institution>;
 
 export enum InstitutionType {
-  K12 = 'k12', // Colegio
-  UNIVERSITY = 'university', // Universidad (Fase 2)
+  K12 = 'k12',
+  UNIVERSITY = 'university',
 }
 
 export enum InstitutionStatus {
@@ -17,22 +17,17 @@ export enum InstitutionStatus {
 @Schema({ timestamps: true, collection: 'institutions' })
 export class Institution {
   @Prop({ type: String, required: true, unique: true })
-  name: string; // "Green Valley School"
+  name: string;
 
   @Prop({ type: String, required: true, unique: true, lowercase: true })
-  slug: string; // "greenvalley" (para subdomain)
+  slug: string;
 
   @Prop({ type: String, enum: InstitutionType, default: InstitutionType.K12 })
   type: InstitutionType;
 
-  @Prop({
-    type: String,
-    enum: InstitutionStatus,
-    default: InstitutionStatus.TRIAL,
-  })
+  @Prop({ type: String, enum: InstitutionStatus, default: InstitutionStatus.TRIAL })
   status: InstitutionStatus;
 
-  // Información de contacto
   @Prop({ type: String, required: true })
   email: string;
 
@@ -48,19 +43,17 @@ export class Institution {
   @Prop({ type: String })
   country: string;
 
-  // Logo y branding
   @Prop({ type: String })
   logo: string;
 
-  @Prop({ type: String, default: '#4F46E5' }) // Color primario
+  @Prop({ type: String, default: '#4F46E5' })
   primaryColor: string;
 
-  // Configuración académica (K12)
   @Prop({
     type: {
-      currentAcademicYear: String, // "2024"
-      academicYearStart: Date, // Inicio del año escolar
-      academicYearEnd: Date, // Fin del año escolar
+      currentAcademicYear: String,
+      academicYearStart: Date,
+      academicYearEnd: Date,
       gradeSystem: {
         type: String,
         enum: ['numeric', 'qualitative', 'both'],
@@ -71,7 +64,7 @@ export class Institution {
         max: Number,
         passingGrade: Number,
       },
-      qualitativeScale: [String], // ['E', 'S', 'A', 'I', 'D']
+      qualitativeScale: [String],
     },
     _id: false,
   })
@@ -88,12 +81,11 @@ export class Institution {
     qualitativeScale?: string[];
   };
 
-  // Límites de plan (para facturación futura)
   @Prop({
     type: {
       maxStudents: Number,
       maxTeachers: Number,
-      maxStorage: Number, // GB
+      maxStorage: Number,
     },
     default: {
       maxStudents: 500,
@@ -119,6 +111,6 @@ export class Institution {
 
 export const InstitutionSchema = SchemaFactory.createForClass(Institution);
 
-// Índices
 InstitutionSchema.index({ slug: 1 }, { unique: true });
 InstitutionSchema.index({ status: 1 });
+InstitutionSchema.index({ type: 1 });
