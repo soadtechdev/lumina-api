@@ -34,6 +34,7 @@ export class InstitutionsController {
 
   @Version('1')
   @Post()
+  @ApiBearerAuth()
   @ApiCreatedResponse({
     description: 'Institution created successfully',
     type: Institution,
@@ -45,6 +46,7 @@ export class InstitutionsController {
 
   @Version('1')
   @Get()
+  @ApiBearerAuth()
   @ApiOkResponse({
     description: 'List of all institutions',
     type: [Institution],
@@ -55,6 +57,7 @@ export class InstitutionsController {
 
   @Version('1')
   @Get(':id')
+  @ApiBearerAuth()
   @ApiOkResponse({
     description: 'Institution found',
     type: Institution,
@@ -66,6 +69,7 @@ export class InstitutionsController {
 
   @Version('1')
   @Get('slug/:slug')
+  @ApiBearerAuth()
   @ApiOkResponse({
     description: 'Institution found by slug',
     type: Institution,
