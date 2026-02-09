@@ -1,3 +1,5 @@
+// src/modules/auth/auth.service.ts
+
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import RegisterUserDto from '@shared/dtos/auth/registerUser.dto';
@@ -10,39 +12,58 @@ import { validatePassword } from '@shared/utils/hashPassword';
 import RegenerateOtpDto from '@shared/dtos/auth/regenerateOtp.dto';
 import LoginDto from '@shared/dtos/auth/login.dto';
 import { IUserDataJWT } from '@shared/interfaces/decodeJWT';
-import { RegisterStep } from '@shared/schemas/user.schema';
 import ResendProvider, { emailType } from '@shared/providers/resend.provider';
 import RecoveryPasswordRequestDto from '@shared/dtos/auth/recoveryPasswordRequest.dto';
 import ChangePasswordDto from '@shared/dtos/auth/changePassword.dto';
-import { GoogleUserDto } from '@shared/dtos/auth/googleUser.dto';
-import { HttpService } from '@nestjs/axios';
-import { JwtService } from '@nestjs/jwt';
-import { OAuth2Client } from 'google-auth-library';
-import * as jwt from 'jsonwebtoken';
+import { AccountStatus } from '@shared/schemas/user.schema';
 
-const jwksClient = require('jwks-rsa');
-
-import constants from '../../contants';
 import { UsersService } from '../users/users.service';
-
-const client = new OAuth2Client(constants.GOOGLE_CLIENT_ID);
-const clientApple = jwksClient({
-  jwksUri: 'https://appleid.apple.com/auth/keys',
-});
 
 @ApiTags('auth')
 @Injectable()
 export class AuthService {
   constructor(
-    private jwtService: JwtService,
     private readonly usersService: UsersService,
     private readonly resendProvider: ResendProvider,
-    private httpService: HttpService,
   ) {}
 
-  async registerUser(registerUser: RegisterUserDto) {
+  async registerUser(registerUser: RegisterUserDto, tenantId: string) {
     try {
-      const newUser = await this.usersService.create(registerUser);
+      // Verificar si el email ya está registrado en este tenant
+      const existingUser = await this.usersService.getUserByEmailWithoutValidation(
+        registerUser.email,
+        tenantId,
+      );
+
+      if (existingUser) {
+        // Si ya existe pero no verificó, reenviar OTP
+        if (existingUser.accountStatus === AccountStatus.PENDING_VERIFICATION) {
+          const otpCode = generateOTP();
+
+          await this.usersService.update(existingUser._id.toString(), tenantId, {
+            otpCode,
+            otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
+          });
+
+          await this.resendProvider.sendTemplateEmail({
+            type: emailType.CODE_VERIFICATION,
+            email: registerUser.email,
+            subject: 'Código de verificación de tu cuenta Lumina',
+            param: { code: otpCode },
+          });
+
+          return {
+            message: 'OTP reenviado',
+            user: existingUser,
+          };
+        }
+
+        // Si ya está verificado o activo
+        throw new HttpException('EMAIL_ALREADY_REGISTERED', HttpStatus.CONFLICT);
+      }
+
+      // Crear nuevo usuario
+      const newUser = await this.usersService.create(registerUser, tenantId, true);
 
       return newUser;
     } catch (e) {
@@ -52,10 +73,16 @@ export class AuthService {
 
   async validateOTP(validateOtpDto: ValidateOtpDto) {
     try {
+      // Buscar sin tenantId porque email es único globalmente
       const user = await this.usersService.getUserByEmail(validateOtpDto?.email);
 
       if (!user) {
         throw new HttpException('USER NOT FOUND', HttpStatus.FORBIDDEN);
+      }
+
+      // Validar que esté en estado PENDING_VERIFICATION
+      if (user.accountStatus !== AccountStatus.PENDING_VERIFICATION) {
+        throw new HttpException('ACCOUNT_ALREADY_VERIFIED', HttpStatus.BAD_REQUEST);
       }
 
       if (DateTime.fromISO(user?.otpExpire?.toISOString()) < DateTime.now()) {
@@ -66,23 +93,32 @@ export class AuthService {
         throw new HttpException('OTP INVALID', HttpStatus.BAD_REQUEST);
       }
 
-      await this.usersService.update(user?._id?.toString(), {
-        otpCode: null,
-        otpExpire: null,
-        step: RegisterStep.OTP_VERIFIED,
-      });
+      // Cambiar estado a VERIFIED
+      const verifiedUser = await this.usersService.update(
+        user._id.toString(),
+        user.tenantId.toString(),
+        {
+          otpCode: null,
+          otpExpire: null,
+          accountStatus: AccountStatus.VERIFIED,
+        },
+      );
 
+      // JWT temporal para crear password (30 min)
       const jwtToken = generateJWTToken(
         {
-          id: user?._id?.toString(),
+          id: user._id.toString(),
+          tenantId: user.tenantId.toString(),
+          role: user.role,
         },
         null,
-        '5m',
+        '30m',
       );
 
       return {
-        user,
+        user: verifiedUser,
         token: jwtToken,
+        message: 'OTP validated. Please create your password.',
       };
     } catch (e) {
       throw new HttpException(e, HttpStatus.BAD_REQUEST);
@@ -96,16 +132,21 @@ export class AuthService {
       if (!user) {
         throw new HttpException('USER NOT FOUND', HttpStatus.FORBIDDEN);
       }
+
       const otpCode = generateOTP();
-      const updateUser = await this.usersService.update(user?._id?.toString(), {
-        otpCode,
-        otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
-      });
+      const updateUser = await this.usersService.update(
+        user._id.toString(),
+        user.tenantId.toString(),
+        {
+          otpCode,
+          otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
+        },
+      );
 
       this.resendProvider.sendTemplateEmail({
         type: emailType.CODE_VERIFICATION,
         email: updateUser.email,
-        subject: 'Código de verificación de tu cuenta Splittier',
+        subject: 'Código de verificación de tu cuenta Lumina',
         param: {
           code: otpCode,
         },
@@ -132,18 +173,42 @@ export class AuthService {
         throw new HttpException('USER NOT ALLOWED FOR CREATE PASSWORD', HttpStatus.FORBIDDEN);
       }
 
-      const userWithPassword = await this.usersService.update(user?._id?.toString(), {
-        password: createPasswordUserDto?.password,
-        step: RegisterStep.PASSWORD_CREATED,
+      // Validar que esté en estado VERIFIED
+      if (user.accountStatus !== AccountStatus.VERIFIED) {
+        throw new HttpException('ACCOUNT_NOT_IN_CORRECT_STATE', HttpStatus.BAD_REQUEST);
+      }
+
+      // Activar cuenta completamente
+      const userWithPassword = await this.usersService.update(
+        user._id.toString(),
+        user.tenantId.toString(),
+        {
+          password: createPasswordUserDto?.password,
+          accountStatus: AccountStatus.ACTIVE,
+        },
+      );
+
+      // Enviar email de bienvenida
+      await this.resendProvider.sendTemplateEmail({
+        email: userWithPassword.email,
+        subject: `Bienvenido a Lumina ${userWithPassword?.firstName ?? ''}`,
+        param: {
+          name: `${userWithPassword?.firstName}`,
+        },
+        type: emailType.REGISTER_SUCCESS,
       });
 
+      // JWT definitivo (1 año)
       const jwtToken = generateJWTToken({
-        id: user?._id?.toString(),
+        id: user._id.toString(),
+        tenantId: user.tenantId.toString(),
+        role: user.role,
       });
 
       return {
         user: userWithPassword,
         token: jwtToken,
+        message: 'Account activated successfully',
       };
     } catch (e) {
       throw new HttpException(e, HttpStatus.BAD_REQUEST);
@@ -157,13 +222,45 @@ export class AuthService {
       if (!user || !user?.isActive) {
         throw new HttpException('USER NOT FOUND', HttpStatus.UNAUTHORIZED);
       }
+
+      // Validar estado de la cuenta
+      if (user.accountStatus === AccountStatus.PENDING_VERIFICATION) {
+        throw new HttpException(
+          'ACCOUNT_NOT_VERIFIED. Please verify your email first.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      if (user.accountStatus === AccountStatus.VERIFIED) {
+        throw new HttpException(
+          'ACCOUNT_INCOMPLETE. Please create your password.',
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      if (user.accountStatus === AccountStatus.SUSPENDED) {
+        throw new HttpException('ACCOUNT_SUSPENDED. Contact support.', HttpStatus.FORBIDDEN);
+      }
+
+      if (user.accountStatus === AccountStatus.INACTIVE) {
+        throw new HttpException('ACCOUNT_INACTIVE. Contact support.', HttpStatus.FORBIDDEN);
+      }
+
+      // Solo permitir login si está ACTIVE
+      if (user.accountStatus !== AccountStatus.ACTIVE) {
+        throw new HttpException('ACCOUNT_NOT_ACTIVE', HttpStatus.UNAUTHORIZED);
+      }
+
       const comparePassword = await validatePassword(loginDto?.password, user?.password);
 
       if (!comparePassword) {
-        throw new HttpException('USER INVALID', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('INVALID_CREDENTIALS', HttpStatus.UNAUTHORIZED);
       }
+
       const token = generateJWTToken({
-        id: user?._id?.toString(),
+        id: user._id.toString(),
+        tenantId: user.tenantId.toString(),
+        role: user.role,
       });
 
       return {
@@ -177,11 +274,19 @@ export class AuthService {
 
   async recoveryPasswordRequest(recoveryPasswordRequestDto: RecoveryPasswordRequestDto) {
     try {
-      const otpCode = generateOTP();
-
       const user = await this.usersService.getUserByEmail(recoveryPasswordRequestDto?.email);
 
-      await this.usersService.update(user?._id?.toString(), {
+      // Solo permitir recuperación si la cuenta está ACTIVE
+      if (user.accountStatus !== AccountStatus.ACTIVE) {
+        throw new HttpException(
+          'ACCOUNT_NOT_ACTIVE. Cannot recover password.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      const otpCode = generateOTP();
+
+      await this.usersService.update(user._id.toString(), user.tenantId.toString(), {
         otpCode,
         otpExpire: DateTime.now().plus({ minutes: 5 }).toUTC().toJSDate(),
       });
@@ -189,11 +294,15 @@ export class AuthService {
       this.resendProvider.sendTemplateEmail({
         type: emailType.CODE_VERIFICATION,
         email: recoveryPasswordRequestDto.email,
-        subject: 'Código recuperacion de cuenta en Splittier',
+        subject: 'Código recuperación de cuenta en Lumina',
         param: {
           code: otpCode,
         },
       });
+
+      return {
+        message: 'Recovery code sent',
+      };
     } catch (e) {
       throw new HttpException(e, HttpStatus.BAD_REQUEST);
     }
@@ -211,116 +320,28 @@ export class AuthService {
         throw new HttpException('OTP EXPIRED, REQUEST ANOTHER ONE', HttpStatus.BAD_REQUEST);
       }
 
-      if (changePasswordDto?.otpCode !== user?.otpCode) {
-        throw new HttpException('OTP INVALID', HttpStatus.BAD_REQUEST);
-      }
-
-      await this.usersService.update(user?._id?.toString(), {
+      await this.usersService.update(user._id.toString(), user.tenantId.toString(), {
         otpCode: null,
         otpExpire: null,
       });
 
-      const userWithPassword = await this.usersService.update(user?._id?.toString(), {
-        password: changePasswordDto?.password,
-      });
+      const userWithPassword = await this.usersService.update(
+        user._id.toString(),
+        user.tenantId.toString(),
+        {
+          password: changePasswordDto?.password,
+        },
+      );
 
       const jwtToken = generateJWTToken({
-        id: user?._id?.toString(),
+        id: user._id.toString(),
+        tenantId: user.tenantId.toString(),
+        role: user.role,
       });
 
       return {
         user: userWithPassword,
         token: jwtToken,
-      };
-    } catch (e) {
-      throw new HttpException(e, HttpStatus.BAD_REQUEST);
-    }
-  }
-
-  /**
-   * [EXTERNAL PLATFORMS LOGIN]
-   * */
-  async verifyToken(token: string) {
-    const ticket = await client.verifyIdToken({
-      idToken: token,
-      audience: constants.GOOGLE_CLIENT_ID,
-    });
-
-    return ticket.getPayload();
-  }
-
-  async loginWithGoogleId(googleUserDto: GoogleUserDto) {
-    try {
-      const userInfo = await this.verifyToken(googleUserDto.idToken);
-
-      let user: any = await this.usersService.getUserByEmailWithoutValidation(userInfo.email);
-
-      if (!user) {
-        user = await this.usersService.create(
-          {
-            email: userInfo.email,
-            firstName: userInfo.given_name ?? '',
-          },
-          false,
-        );
-      }
-
-      const token = generateJWTToken({
-        id: user?._id?.toString(),
-      });
-
-      return {
-        user: user,
-        token,
-      };
-    } catch (e) {
-      throw new HttpException(e, HttpStatus.BAD_REQUEST);
-    }
-  }
-  getAppleKey(header: jwt.JwtHeader, callback: jwt.SigningKeyCallback) {
-    clientApple.getSigningKey(header.kid, (err, key) => {
-      if (err) {
-        callback(err);
-      } else {
-        const signingKey = key.getPublicKey();
-
-        callback(null, signingKey);
-      }
-    });
-  }
-  async verifyAppleToken(token: string): Promise<any> {
-    return new Promise((resolve, reject) => {
-      jwt.verify(token, this.getAppleKey, { algorithms: ['RS256'] }, (err, decoded) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(decoded);
-        }
-      });
-    });
-  }
-  async loginWithApple(appleUserDto: GoogleUserDto) {
-    try {
-      const userInfo = await this.verifyAppleToken(appleUserDto.idToken);
-      let user: any = await this.usersService.getUserByEmailWithoutValidation(userInfo.email);
-
-      if (!user) {
-        user = await this.usersService.create(
-          {
-            email: userInfo.email,
-            firstName: userInfo.given_name ?? '',
-          },
-          false,
-        );
-      }
-
-      const token = generateJWTToken({
-        id: user?._id?.toString(),
-      });
-
-      return {
-        user: user,
-        token,
       };
     } catch (e) {
       throw new HttpException(e, HttpStatus.BAD_REQUEST);

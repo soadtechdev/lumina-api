@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { RegisterStep, UserGenders } from '@shared/schemas/user.schema';
+import { AccountStatus, UserGenders } from '@shared/schemas/user.schema';
 import { DateTime } from 'luxon';
 
 export class UpdateUserDto {
@@ -31,7 +31,7 @@ export class UpdateUserDto {
   isActive?: boolean;
 
   // PRIVATE VALUES
+  accountStatus?: AccountStatus;
   otpCode?: string;
   otpExpire?: Date;
-  step?: RegisterStep;
 }

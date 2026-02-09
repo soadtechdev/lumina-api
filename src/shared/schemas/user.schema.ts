@@ -11,6 +11,14 @@ export enum UserGenders {
   OTHERS = 'others',
 }
 
+export enum AccountStatus {
+  PENDING_VERIFICATION = 'pending_verification', // Esperando validar OTP
+  VERIFIED = 'verified', // OTP validado, pero sin password
+  ACTIVE = 'active', // Cuenta completa y activa
+  SUSPENDED = 'suspended', // Suspendida por admin
+  INACTIVE = 'inactive', // Desactivada por el usuario
+}
+
 export enum RoleUser {
   // Roles globales (sin tenant)
   SUPER_ADMIN = 'super_admin', // Lumina Tech
@@ -62,6 +70,13 @@ export class User extends BaseTenantEntity {
   @Prop({ type: Date })
   otpExpire: Date;
 
+  @Prop({
+    type: String,
+    enum: AccountStatus,
+    default: AccountStatus.PENDING_VERIFICATION,
+  })
+  accountStatus: AccountStatus;
+
   @Prop({ type: Boolean, default: true })
   isActive: boolean;
 
@@ -94,7 +109,7 @@ export class User extends BaseTenantEntity {
 export const UserSchema = SchemaFactory.createForClass(User);
 
 // Índices críticos para multi-tenant
-UserSchema.index({ tenantId: 1, email: 1 }, { unique: true });
+UserSchema.index({ tenantId: 1, accountStatus: 1, email: 1 }, { unique: true });
 UserSchema.index({ tenantId: 1, role: 1 });
 UserSchema.index({ tenantId: 1, gradeId: 1 });
 UserSchema.index({ tenantId: 1, deletedAt: 1 });

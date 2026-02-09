@@ -1,4 +1,4 @@
-import { Body, Controller, Post, Req, UseGuards, UsePipes, Version } from '@nestjs/common';
+import { Body, Controller, Headers, Post, Req, UseGuards, UsePipes, Version } from '@nestjs/common';
 import { ApiBadGatewayResponse, ApiBearerAuth, ApiCreatedResponse, ApiTags } from '@nestjs/swagger';
 import RegisterUserDto from '@shared/dtos/auth/registerUser.dto';
 import ValidateOtpDto from '@shared/dtos/auth/validateOtp.dto';
@@ -11,10 +11,12 @@ import { JwtGuard } from '@shared/guards/jwt.guard';
 import { UpdateUserDto } from '@shared/dtos/users/updateUser.dto';
 import RecoveryPasswordRequestDto from '@shared/dtos/auth/recoveryPasswordRequest.dto';
 import ChangePasswordDto from '@shared/dtos/auth/changePassword.dto';
+import { GoogleUserDto } from '@shared/dtos/auth/googleUser.dto';
 
 import {
   changePasswordValidationSchema,
-  createPasswordUserValidationSchema, loginGoogleValidationSchema,
+  createPasswordUserValidationSchema,
+  loginGoogleValidationSchema,
   loginValidationSchema,
   recoveryPasswordRequestValidationSchema,
   regenerateOtpValidationSchema,
@@ -22,7 +24,6 @@ import {
   validateOtpValidationSchema,
 } from './joiSchema';
 import { AuthService } from './auth.service';
-import { GoogleUserDto } from '@shared/dtos/auth/googleUser.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -34,8 +35,11 @@ export class AuthController {
   @ApiCreatedResponse({ description: 'The user register succesfully', type: UpdateUserDto })
   @ApiBadGatewayResponse({ description: 'The user register failed' })
   @Post('register-user')
-  async registerUser(@Body() registerUserDto: RegisterUserDto) {
-    return await this.authService.registerUser(registerUserDto);
+  async registerUser(
+    @Body() registerUserDto: RegisterUserDto,
+    @Headers('x-tenant-id') tenantId: string,
+  ) {
+    return await this.authService.registerUser(registerUserDto, tenantId);
   }
 
   @Version('1')
@@ -85,18 +89,5 @@ export class AuthController {
   @Post('change-password')
   async changePassword(@Body() changePasswordDto: ChangePasswordDto) {
     return await this.authService.changePassword(changePasswordDto);
-  }
-
-  @Version('1')
-  @UsePipes(new JoiValidationPipe(loginGoogleValidationSchema))
-  @Post('login-google')
-  async loginWithGoogleId(@Body() googleUserDto: GoogleUserDto) {
-    return await this.authService.loginWithGoogleId(googleUserDto);
-  }
-  @Version('1')
-  @UsePipes(new JoiValidationPipe(loginGoogleValidationSchema))
-  @Post('login-apple')
-  async loginWithApple(@Body() googleUserDto: GoogleUserDto) {
-    return await this.authService.loginWithApple(googleUserDto);
   }
 }
