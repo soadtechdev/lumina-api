@@ -1,7 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
-import { ApiProperty } from '@nestjs/swagger';
-import { DateTime } from 'luxon';
-import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
+import { HydratedDocument, Types } from 'mongoose';
+
+import { BaseTenantEntity } from './base-tenant.schema';
 
 export type UserDocument = HydratedDocument<User>;
 
@@ -11,105 +11,90 @@ export enum UserGenders {
   OTHERS = 'others',
 }
 
-export enum UserLanguage {
-  ES = 'es',
-  EN = 'en',
-  DE = 'de',
-  FR = 'fr',
-}
-
 export enum RoleUser {
-  user = 'user',
-  admin = 'admin',
-}
+  // Roles globales (sin tenant)
+  SUPER_ADMIN = 'super_admin', // Lumina Tech
 
-export enum RegisterStep {
-  GUEST_USER = 'guest_user', // When the user is a guest
-  OTP_VERIFICATION = 'otp_verification', // When OTP code is sent
-  OTP_VERIFIED = 'otp_verified', // When OTP code is verified
-  PASSWORD_CREATED = 'password_created', // when the user creates their password
-  PROFILE_CREATED = 'profile_created', // when the user does not have a profile
-  COMPLETED = 'completed', // when the user creates their profile name, avatar, and primary data
-}
+  // Roles K12 (con tenant)
+  DIRECTOR = 'director', // Director del colegio
+  COORDINATOR = 'coordinator', // Coordinador académico
+  TEACHER = 'teacher', // Docente
+  STUDENT = 'student', // Estudiante
+  GUARDIAN = 'guardian', // Acudiente/Padre
 
-export enum CurrencyType {
-  USD = 'USD',
-  EUR = 'EUR',
-  GBP = 'GBP',
-  COP = 'COP',
-  CAD = 'CAD',
-  MXN = 'MXN',
-  BRL = 'BRL',
-  ARS = 'ARS',
+  // Roles Universidad (Fase 2)
+  RECTOR = 'rector',
+  PROFESSOR = 'professor',
 }
 
 @Schema({
   timestamps: true,
   collection: 'users',
 })
-export class User {
-  @ApiProperty({ type: String, example: 'John', required: false })
-  @Prop({ type: String, required: false })
+export class User extends BaseTenantEntity {
+  @Prop({ type: String, required: true })
   firstName: string;
 
-  @ApiProperty({ type: String, example: 'Doe', required: false })
-  @Prop({ type: String, required: false })
+  @Prop({ type: String })
   lastName: string;
 
-  @ApiProperty({ type: String, example: 'johndoe@gmail.com', required: true })
-  @Prop({ type: String, required: false, unique: true })
+  @Prop({ type: String, required: true, unique: true })
   email: string;
 
-  @ApiProperty({ type: String, example: '+3455499321', required: false })
-  @Prop({ type: String, required: false })
+  @Prop({ type: String })
   phoneNumber: string;
 
-  @ApiProperty({ type: String, example: 'password', required: false })
-  @Prop({ type: String, required: false })
+  @Prop({ type: String })
   password: string;
 
-  @ApiProperty({ type: String, example: 'google.com/images/imagen.jpg', required: false })
-  @Prop({ type: String, required: false })
+  @Prop({ type: String })
   avatar: string;
 
-  @ApiProperty({ type: String, enum: UserGenders, example: UserGenders.MALE })
-  @Prop({ type: String, enum: UserGenders, required: false })
+  @Prop({ type: String, enum: UserGenders })
   gender: UserGenders;
 
-  @ApiProperty({ type: Date, example: DateTime.now(), required: false })
-  @Prop({ type: Date, required: false })
+  @Prop({ type: Date })
   birthday: Date;
 
-  @Prop({ type: String, required: false })
+  @Prop({ type: String })
   otpCode: string;
 
-  @Prop({ type: Date, required: false })
+  @Prop({ type: Date })
   otpExpire: Date;
 
-  @ApiProperty({ type: Boolean, default: true })
   @Prop({ type: Boolean, default: true })
   isActive: boolean;
 
-  @Prop({ type: String, enum: RoleUser, default: RoleUser.user })
+  @Prop({
+    type: String,
+    enum: RoleUser,
+    default: RoleUser.STUDENT,
+  })
   role: RoleUser;
 
-  @Prop({ type: String, enum: RegisterStep, default: RegisterStep.OTP_VERIFICATION })
-  step: RegisterStep;
+  // Para estudiantes K12
+  @Prop({ type: Types.ObjectId, ref: 'Grade' })
+  gradeId: Types.ObjectId; // Grado asignado
 
-  @Prop({ type: String, enum: CurrencyType, default: CurrencyType.EUR })
-  currency: CurrencyType;
+  @Prop({ type: Types.ObjectId, ref: 'Section' })
+  sectionId: Types.ObjectId; // Grupo/Sección
 
-  @Prop({ type: String, enum: UserLanguage, default: UserLanguage.ES })
-  language: UserLanguage;
+  // Para docentes
+  @Prop([{ type: Types.ObjectId, ref: 'Subject' }])
+  subjects: Types.ObjectId[]; // Materias que enseña
 
-  @Prop({ type: Date, required: false })
-  deletedAt: Date;
+  // Relación acudiente-estudiante
+  @Prop([{ type: Types.ObjectId, ref: 'User' }])
+  guardians: Types.ObjectId[]; // IDs de acudientes
+
+  @Prop([{ type: Types.ObjectId, ref: 'User' }])
+  students: Types.ObjectId[]; // IDs de estudiantes (si es acudiente)
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-// DEFINED INDEX
-UserSchema.index({
-  email: 1,
-  phoneNumber: 1,
-});
+// Índices críticos para multi-tenant
+UserSchema.index({ tenantId: 1, email: 1 }, { unique: true });
+UserSchema.index({ tenantId: 1, role: 1 });
+UserSchema.index({ tenantId: 1, gradeId: 1 });
+UserSchema.index({ tenantId: 1, deletedAt: 1 });
